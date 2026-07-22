@@ -1,0 +1,27 @@
+plugins {
+    id "java-library"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    compileOnly files("libs/viaversion-common-5.11.1-original.jar")
+    compileOnly "io.netty:netty-buffer:4.2.1.Final"
+}
+
+tasks.named("jar") {
+    // The two Android-compatible classes in src/main/java are added first.
+    // EXCLUDE then keeps them in preference to the copies in the upstream jar.
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(zipTree("libs/viaversion-common-5.11.1-original.jar"))
+}
+
+tasks.register("syncAndroidJar", Copy) {
+    dependsOn(tasks.named("jar"))
+    from(tasks.named("jar").flatMap { it.archiveFile })
+    into(rootProject.file("app/libs"))
+    rename { "viaversion-common-5.11.1-android.jar" }
+}
