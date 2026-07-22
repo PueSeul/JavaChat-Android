@@ -173,12 +173,18 @@ public final class ChatActivity extends Activity implements MinecraftConnectionS
 
     @Override
     public void onChat(ChatLine line) {
+        boolean wasEmpty = chats.isEmpty();
         java.util.ArrayList<ChatLine> updated = new java.util.ArrayList<>(chats);
         updated.add(line);
         chats = updated;
         if (!showingPlayers) {
-            addChatLine(line);
-            scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+            if (wasEmpty) {
+                // Replace the empty-state guide when the first real line arrives.
+                renderContent();
+            } else {
+                addChatLine(line);
+                scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
+            }
         }
     }
 

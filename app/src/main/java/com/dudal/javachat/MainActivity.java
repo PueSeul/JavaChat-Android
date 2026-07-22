@@ -37,6 +37,7 @@ import com.dudal.javachat.protocol.ProtocolRegistry;
 import com.dudal.javachat.status.ServerStatusChecker;
 import com.dudal.javachat.status.ServerStatusResult;
 import com.dudal.javachat.ui.UiKit;
+import com.dudal.javachat.ui.ServerEndpointText;
 import com.dudal.javachat.update.GitHubUpdateChecker;
 import com.dudal.javachat.update.UpdateFileProvider;
 import com.dudal.javachat.update.VersionOrder;
@@ -130,7 +131,9 @@ public final class MainActivity extends Activity {
         LinearLayout root = UiKit.vertical(this);
         root.setPadding(UiKit.dp(this, 20), UiKit.dp(this, 24),
                 UiKit.dp(this, 20), UiKit.dp(this, 36));
-        UiKit.applySafeInsets(root);
+        // Keep the scroll viewport itself inside the system bars. Applying the
+        // insets to the scrolling child lets its padding scroll under a bar.
+        UiKit.applySafeInsets(scroll);
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -348,7 +351,8 @@ public final class MainActivity extends Activity {
         TextView name = UiKit.sectionTitle(this, server.getName());
         card.addView(name);
         TextView endpoint = UiKit.text(this,
-                server.getHost() + ":" + server.getPort(), 14, R.color.text_secondary);
+                ServerEndpointText.format(server.getHost(), server.getPort()),
+                14, R.color.text_secondary);
         UiKit.margin(endpoint, 0, 4, 0, 0);
         card.addView(endpoint);
         TextView status = UiKit.text(this, getString(R.string.server_status_checking),
