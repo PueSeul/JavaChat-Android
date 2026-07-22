@@ -14,6 +14,8 @@ public final class AuthErrorText {
     public static String from(Throwable error) {
         boolean dnsFailure = false;
         boolean timeout = false;
+        AuthDnsException authDnsFailure = null;
+        AuthConnectionException authConnectionFailure = null;
         StringBuilder messages = new StringBuilder();
         Throwable current = error;
         while (current != null) {
@@ -22,6 +24,12 @@ public final class AuthErrorText {
             }
             if (current instanceof UnknownHostException) {
                 dnsFailure = true;
+            }
+            if (current instanceof AuthDnsException detailedDnsFailure) {
+                authDnsFailure = detailedDnsFailure;
+            }
+            if (current instanceof AuthConnectionException detailedConnectionFailure) {
+                authConnectionFailure = detailedConnectionFailure;
             }
             if (current instanceof SocketTimeoutException) {
                 timeout = true;
@@ -40,6 +48,17 @@ public final class AuthErrorText {
         if (combined.contains("doesn't have a minecraft profile")
                 || combined.contains("minecraft profile not found")) {
             return noMinecraftProfile();
+        }
+        if (authDnsFailure != null) {
+            String host = authDnsFailure.getHost();
+            return AuthEndpoint.label(host) + " 서버(" + host + ")의 주소를 찾지 못했습니다. "
+                    + authDnsFailure.getRetryCount() + "회 재시도했지만 연결되지 않았습니다.";
+        }
+        if (authConnectionFailure != null) {
+            String host = authConnectionFailure.getHost();
+            return AuthEndpoint.label(host) + " 서버(" + host + ") 연결이 중단됐습니다. "
+                    + authConnectionFailure.getRetryCount()
+                    + "회 재시도했지만 연결되지 않았습니다.";
         }
         if (dnsFailure || combined.contains("eai_nodata")
                 || combined.contains("no address associated with hostname")) {

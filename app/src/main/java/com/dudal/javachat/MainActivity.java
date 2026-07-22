@@ -468,6 +468,16 @@ public final class MainActivity extends Activity {
         accountStatus.setText("Microsoft 로그인 준비 중입니다.");
         auth.login(new MicrosoftAuthRepository.LoginCallback() {
             @Override
+            public void onStatus(String status) {
+                runOnUiThread(() -> {
+                    if (loginInProgress) {
+                        accountButton.setText("로그인 중…");
+                        accountStatus.setText(status);
+                    }
+                });
+            }
+
+            @Override
             public void onDeviceCode(MsaDeviceCode code) {
                 runOnUiThread(() -> {
                     refreshAccount();
