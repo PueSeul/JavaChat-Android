@@ -2,6 +2,8 @@
 
 Minecraft Java Edition **1.8.9부터 26.2까지**의 서버에 안드로이드에서 접속해 채팅을 읽고 보내며, 접속자 탭 목록을 확인하는 테스트 앱입니다. 서버 플러그인을 사용하지 않고 일반 Minecraft Java 클라이언트처럼 직접 접속합니다. 여기서 `26.2`는 `1.26.2`가 아닌 Minecraft의 새 버전명입니다.
 
+[Java Chat v0.8.0-test APK 바로 다운로드](https://github.com/PueSeul/JavaChat-Android/releases/download/v0.8.0-test/JavaChat-v0.8.0-test-debug.apk)
+
 ## 현재 구현
 
 - 여러 서버 저장, 추가, 편집, 삭제(서버에는 주소·포트·버전만 저장)
