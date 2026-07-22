@@ -71,12 +71,12 @@ public class ViaProtocolCoverageTest {
 
         @Override
         public String getPlatformName() {
-            return "JavaChat Tests";
+            return "Minecraft Chat Tests";
         }
 
         @Override
         public String getPlatformVersion() {
-            return "1.2";
+            return "1.0";
         }
     }
 }

@@ -1,17 +1,19 @@
-# Java Chat
+# Minecraft Chat
 
-Java Chat은 안드로이드에서 Minecraft Java 서버의 채팅과 접속자 목록을 확인할 수 있는 앱입니다. 서버 플러그인 없이 접속하며, Java 1.8.9부터 26.2까지의 서버 버전 선택, 채팅과 명령어 전송, 명령어 자동완성, 접속자 스킨 얼굴 표시, 여러 서버 저장 및 상태 확인을 지원합니다.
+Minecraft Chat은 안드로이드에서 Minecraft Java 서버의 채팅과 접속자 목록을 확인할 수 있는 앱입니다. 서버 플러그인 없이 접속하며, Java 1.8.9부터 26.2까지의 서버 버전 선택, 채팅과 명령어 전송, 명령어 자동완성, 접속자 스킨 얼굴 표시, 여러 서버 저장 및 상태 확인을 지원합니다.
 
 ## 설치 방법
 
-1. [Java Chat v1.2 APK 다운로드](https://github.com/PueSeul/JavaChat-Android/releases/download/v1.2/JavaChat-v1.2.apk)를 눌러 APK를 받습니다.
-2. 다운로드한 `JavaChat-v1.2.apk`를 실행합니다.
+기존 `Java Chat`이 설치돼 있다면 서명 키가 달라졌으므로 먼저 기존 앱을 삭제합니다.
+
+1. [Minecraft Chat v1.0 APK 다운로드](https://github.com/PueSeul/JavaChat-Android/releases/download/v1.0/MinecraftChat-v1.0.apk)를 눌러 APK를 받습니다.
+2. 다운로드한 `MinecraftChat-v1.0.apk`를 실행합니다.
 3. Android가 요청하면 브라우저 또는 파일 앱의 **이 출처의 앱 설치 허용**을 켜고 설치를 완료합니다.
 
 ADB로 설치하려면 다음 명령을 사용할 수 있습니다.
 
 ```powershell
-adb install -r JavaChat-v1.2.apk
+adb install -r MinecraftChat-v1.0.apk
 ```
 
 ## 사용 방법

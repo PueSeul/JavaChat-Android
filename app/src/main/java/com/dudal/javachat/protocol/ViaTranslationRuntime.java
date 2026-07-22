@@ -283,12 +283,12 @@ public final class ViaTranslationRuntime {
 
         @Override
         public String getPlatformName() {
-            return "JavaChat Android";
+            return "Minecraft Chat Android";
         }
 
         @Override
         public String getPlatformVersion() {
-            return "1.2";
+            return "1.0";
         }
 
         @Override

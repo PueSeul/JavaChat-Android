@@ -1,6 +1,6 @@
 # Third-party notices
 
-Java Chat은 다음 오픈소스 구성요소를 사용합니다.
+Minecraft Chat은 다음 오픈소스 구성요소를 사용합니다.
 
 - ViaVersion 5.11.1-SNAPSHOT, GNU General Public License v3.0. 26.2 클라이언트 패킷을 Java 1.8.9–26.1.2 서버 프로토콜로 변환합니다. Android 호환 수정과 정확한 업스트림 커밋은 `viaversion-android/README.md`에 기록되어 있으며, 대응 소스는 소스 배포물의 `third_party/ViaVersion-5.11.1-SNAPSHOT-source.zip`에 포함됩니다. 라이선스 전문: `licenses/ViaVersion-GPL-3.0.txt`. 소스: <https://github.com/ViaVersion/ViaVersion>.
 - GeyserMC MCProtocolLib, MIT License. 26.2 feature commit `b77d50c33a17601e6b71078fe9b6de7d98b4ff13`. 라이선스 전문: `mcprotocol/LICENSE-MCProtocolLib.txt`.
