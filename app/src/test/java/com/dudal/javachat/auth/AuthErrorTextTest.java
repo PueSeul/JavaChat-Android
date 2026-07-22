@@ -3,6 +3,7 @@ package com.dudal.javachat.auth;
 import org.junit.Test;
 
 import java.net.UnknownHostException;
+import java.net.SocketException;
 
 import static org.junit.Assert.assertEquals;
 
@@ -26,6 +27,30 @@ public class AuthErrorTextTest {
         assertEquals(
                 "Microsoft 인증 서버 주소를 찾지 못했습니다. "
                         + "인터넷 연결 또는 DNS 설정을 확인한 뒤 다시 시도해 주세요.",
+                AuthErrorText.from(error));
+    }
+
+    @Test
+    public void identifiesTheAuthenticationStageAfterDnsRetries() {
+        AuthDnsException error = new AuthDnsException(
+                "xsts.auth.xboxlive.com", 3,
+                new UnknownHostException("xsts.auth.xboxlive.com"));
+
+        assertEquals(
+                "Xbox 보안 토큰 인증 서버(xsts.auth.xboxlive.com)의 주소를 찾지 못했습니다. "
+                        + "3회 재시도했지만 연결되지 않았습니다.",
+                AuthErrorText.from(error));
+    }
+
+    @Test
+    public void describesConnectionAbortAfterRetries() {
+        AuthConnectionException error = new AuthConnectionException(
+                "login.microsoftonline.com", 3,
+                new SocketException("Software caused connection abort"));
+
+        assertEquals(
+                "Microsoft 계정 로그인 서버(login.microsoftonline.com) 연결이 중단됐습니다. "
+                        + "3회 재시도했지만 연결되지 않았습니다.",
                 AuthErrorText.from(error));
     }
 

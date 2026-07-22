@@ -1,5 +1,6 @@
 package com.dudal.javachat.protocol;
 
+import com.dudal.javachat.BuildConfig;
 import android.content.Context;
 import android.util.Log;
 
@@ -288,7 +289,7 @@ public final class ViaTranslationRuntime {
 
         @Override
         public String getPlatformVersion() {
-            return "1.1";
+            return BuildConfig.VERSION_NAME;
         }
 
         @Override

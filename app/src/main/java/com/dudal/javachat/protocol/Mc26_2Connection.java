@@ -336,13 +336,15 @@ final class Mc26_2Connection implements ProtocolConnection {
                     ComponentText.plain(chat.getName()),
                     ComponentText.plain(chat.getMessage())));
         } else if (packet instanceof ClientboundSystemChatPacket chat
-                && !chat.isOverlay()
-                && SystemChatFilter.shouldDisplay(chat.getContent())) {
-            listener.onChat(new ChatLine(
-                    System.currentTimeMillis(),
-                    ChatLine.Kind.SYSTEM,
-                    "서버",
-                    ComponentText.plain(chat.getContent())));
+                && !chat.isOverlay()) {
+            String message = SystemChatFilter.displayText(chat.getContent());
+            if (message != null) {
+                listener.onChat(new ChatLine(
+                        System.currentTimeMillis(),
+                        ChatLine.Kind.SYSTEM,
+                        "서버",
+                        message));
+            }
         }
     }
 

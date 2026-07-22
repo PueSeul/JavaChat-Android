@@ -3,10 +3,10 @@ package com.dudal.javachat.auth;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.dudal.javachat.BuildConfig;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import net.raphimc.minecraftauth.MinecraftAuth;
 import net.raphimc.minecraftauth.java.JavaAuthManager;
 import net.raphimc.minecraftauth.java.model.MinecraftPlayerCertificates;
 import net.raphimc.minecraftauth.java.model.MinecraftProfile;
@@ -15,6 +15,7 @@ import net.raphimc.minecraftauth.java.request.MinecraftPlayerCertificatesRequest
 import net.raphimc.minecraftauth.msa.model.MsaDeviceCode;
 import net.raphimc.minecraftauth.msa.service.impl.DeviceCodeMsaAuthService;
 import net.raphimc.minecraftauth.util.http.content.JsonContent;
+import net.lenni0451.commons.httpclient.HttpClient;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,14 +25,17 @@ public final class MicrosoftAuthRepository {
     private static final String SESSION_KEY = "microsoft_session";
     private static final String META_PREFS = "auth_meta";
     private static final String ACCOUNT_NAME = "account_name";
-    private static final String USER_AGENT = "MinecraftChat/1.1 Android";
+    private static final String USER_AGENT =
+            "MinecraftChat/" + BuildConfig.VERSION_NAME + " Android";
+    private static final long NETWORK_READY_WAIT_MS = 6_000L;
 
+    private final Context appContext;
     private final SecureStore secureStore;
     private final SharedPreferences metadata;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public MicrosoftAuthRepository(Context context) {
-        Context appContext = context.getApplicationContext();
+        appContext = context.getApplicationContext();
         secureStore = new SecureStore(appContext);
         metadata = appContext.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE);
     }
@@ -47,9 +51,14 @@ public final class MicrosoftAuthRepository {
     public void login(LoginCallback callback) {
         executor.execute(() -> {
             try {
+                callback.onStatus("네트워크 연결 확인 중…");
+                AuthNetworkWaiter.awaitValidated(appContext, NETWORK_READY_WAIT_MS);
+                callback.onStatus("Microsoft 인증 서버에 연결 중…");
                 Consumer<MsaDeviceCode> deviceCodeConsumer = callback::onDeviceCode;
+                HttpClient authHttpClient = AuthHttpClientFactory.create(
+                        USER_AGENT, callback::onStatus);
                 JavaAuthManager manager = JavaAuthManager
-                        .create(MinecraftAuth.createHttpClient(USER_AGENT))
+                        .create(authHttpClient)
                         .login(
                                 (httpClient, config, consumer) ->
                                         new DeviceCodeMsaAuthService(httpClient, config, consumer),
@@ -64,12 +73,13 @@ public final class MicrosoftAuthRepository {
     }
 
     public OnlineIdentity requireIdentity() throws Exception {
+        AuthNetworkWaiter.awaitValidated(appContext, NETWORK_READY_WAIT_MS);
         String json = secureStore.get(SESSION_KEY);
         if (json == null) {
             throw new IllegalStateException("Microsoft 계정 로그인이 필요합니다.");
         }
         JavaAuthManager manager = JavaAuthManager.fromJson(
-                MinecraftAuth.createHttpClient(USER_AGENT),
+                AuthHttpClientFactory.create(USER_AGENT, status -> { }),
                 JsonParser.parseString(json).getAsJsonObject());
         OnlineIdentity identity = resolveIdentity(manager);
         save(manager, identity.getProfileName());
@@ -110,6 +120,9 @@ public final class MicrosoftAuthRepository {
     }
 
     public interface LoginCallback {
+        default void onStatus(String status) {
+        }
+
         void onDeviceCode(MsaDeviceCode code);
         void onSuccess(String profileName);
         void onError(Throwable error);
