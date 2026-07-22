@@ -32,7 +32,7 @@ public class ServerStatusCheckerTest {
                 new InetSocketAddress("127.0.0.1", port), MinecraftProtocol::new);
         testServer.setGlobalFlag(MinecraftConstants.SERVER_INFO_BUILDER_KEY,
                 session -> new ServerStatusInfo(
-                        Component.text("Java Chat test"),
+                        Component.text("Minecraft Chat test"),
                         new PlayerInfo(20, 3, List.of()),
                         new VersionInfo("26.2", 776),
                         null,

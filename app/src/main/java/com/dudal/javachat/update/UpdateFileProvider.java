@@ -13,7 +13,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 
 public final class UpdateFileProvider extends ContentProvider {
-    public static final String FILE_NAME = "JavaChat-update.apk";
+    public static final String FILE_NAME = "MinecraftChat-update.apk";
     private static final String URI_PATH = "/" + FILE_NAME;
 
     @Override

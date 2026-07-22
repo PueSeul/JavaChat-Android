@@ -299,7 +299,7 @@ public final class MinecraftConnectionService extends Service implements Connect
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(activeServer == null ? "Java Chat" : activeServer.getName())
+                .setContentTitle(activeServer == null ? "Minecraft Chat" : activeServer.getName())
                 .setContentText(text)
                 .setContentIntent(pendingIntent)
                 .setOngoing(state != ConnectionState.DISCONNECTED && state != ConnectionState.ERROR);

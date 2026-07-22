@@ -37,7 +37,7 @@ public final class GitHubUpdateChecker {
         connection.setRequestProperty("Accept", "application/vnd.github+json");
         connection.setRequestProperty("X-GitHub-Api-Version", "2026-03-10");
         connection.setRequestProperty("User-Agent",
-                "JavaChat/" + BuildConfig.VERSION_NAME + " Android");
+                "MinecraftChat/" + BuildConfig.VERSION_NAME + " Android");
         try {
             int status = connection.getResponseCode();
             if (status == HttpURLConnection.HTTP_NOT_FOUND) {
@@ -90,7 +90,7 @@ public final class GitHubUpdateChecker {
 
     private static ApkAsset selectApkAsset(String tagName, ReleaseAsset[] assets)
             throws IOException {
-        String expectedName = "JavaChat-" + tagName + ".apk";
+        String expectedName = "MinecraftChat-" + tagName + ".apk";
         if (assets != null) {
             for (ReleaseAsset asset : assets) {
                 if (asset != null && expectedName.equals(asset.name)
@@ -139,7 +139,7 @@ public final class GitHubUpdateChecker {
         connection.setInstanceFollowRedirects(true);
         connection.setRequestProperty("Accept", "application/octet-stream");
         connection.setRequestProperty("User-Agent",
-                "JavaChat/" + BuildConfig.VERSION_NAME + " Android");
+                "MinecraftChat/" + BuildConfig.VERSION_NAME + " Android");
         boolean complete = false;
         try {
             int status = connection.getResponseCode();

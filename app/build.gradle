@@ -2,6 +2,14 @@ plugins {
     id "com.android.application"
 }
 
+def releaseKeystoreProperties = new Properties()
+def releaseKeystorePropertiesFile = rootProject.file("keystore.properties")
+if (releaseKeystorePropertiesFile.exists()) {
+    releaseKeystorePropertiesFile.withInputStream {
+        releaseKeystoreProperties.load(it)
+    }
+}
+
 android {
     namespace = "com.dudal.javachat"
     compileSdk = 37
@@ -10,17 +18,27 @@ android {
         applicationId = "com.dudal.javachat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "1.2"
+        versionCode = 1
+        versionName = "1.0"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
+    }
+
+    signingConfigs {
+        release {
+            if (releaseKeystorePropertiesFile.exists()) {
+                storeFile = file(releaseKeystoreProperties["storeFile"])
+                storePassword = releaseKeystoreProperties["storePassword"]
+                keyAlias = releaseKeystoreProperties["keyAlias"]
+                keyPassword = releaseKeystoreProperties["keyPassword"]
+                storeType = releaseKeystoreProperties.getProperty("storeType", "PKCS12")
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled = false
-            // Keep the existing signing identity so v0.8 users can update without
-            // uninstalling the app and losing their saved servers or login session.
-            signingConfig = signingConfigs.debug
+            signingConfig = signingConfigs.release
         }
     }
 

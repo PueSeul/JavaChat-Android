@@ -244,7 +244,7 @@ public class ViaManagerImpl implements ViaManager {
     }
 
     private void checkJavaVersion() {
-        // Java Chat is compiled for Java 17 and runs through Android core
+        // Minecraft Chat is compiled for Java 17 and runs through Android core
         // library desugaring. Android does not expose Runtime.version().
         int javaVersion = 17;
         if (javaVersion < 17) {

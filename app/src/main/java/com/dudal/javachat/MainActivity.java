@@ -144,7 +144,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = UiKit.title(this, "Java Chat");
+        TextView title = UiKit.title(this, "Minecraft Chat");
         titleRow.addView(title, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         Button more = UiKit.button(this, "⋮", false);
@@ -619,7 +619,7 @@ public final class MainActivity extends Activity {
         if (!VersionOrder.isNewer(release.getTagName(), BuildConfig.VERSION_NAME)) {
             new AlertDialog.Builder(this)
                     .setTitle("최신 버전입니다")
-                    .setMessage("현재 설치된 Java Chat v" + BuildConfig.VERSION_NAME
+                    .setMessage("현재 설치된 Minecraft Chat v" + BuildConfig.VERSION_NAME
                             + "이 최신 정식 버전입니다.")
                     .setPositiveButton("확인", null)
                     .show();
@@ -653,7 +653,7 @@ public final class MainActivity extends Activity {
             pendingUpdate = release;
             new AlertDialog.Builder(this)
                     .setTitle("설치 권한이 필요합니다")
-                    .setMessage("처음 한 번만 Java Chat의 '이 출처 허용'을 켜 주세요. "
+                    .setMessage("처음 한 번만 Minecraft Chat의 '이 출처 허용'을 켜 주세요. "
                             + "설정에서 돌아오면 다운로드와 설치를 계속합니다.")
                     .setNegativeButton("취소", (dialog, which) -> pendingUpdate = null)
                     .setPositiveButton("설정 열기", (dialog, which) -> {
