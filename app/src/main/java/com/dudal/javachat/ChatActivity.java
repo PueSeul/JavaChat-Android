@@ -362,18 +362,23 @@ public final class ChatActivity extends Activity implements MinecraftConnectionS
         LinearLayout row = UiKit.vertical(this);
         String time = timeFormat.format(new Date(line.getTimestamp()));
         String sender = line.getSender() == null || line.getSender().isBlank()
-                ? "" : "  " + line.getSender();
+                ? "" : line.getSender();
         int messageColor = switch (line.getKind()) {
             case LOCAL_ERROR -> R.color.danger;
             case PRESENCE -> R.color.chat_presence;
             case SYSTEM -> R.color.chat_server;
             case PLAYER -> R.color.text_primary;
         };
-        int metaColor = line.getKind() == ChatLine.Kind.PLAYER
-                ? R.color.text_secondary : messageColor;
-        TextView meta = UiKit.text(this, time + sender, 11, metaColor);
-        meta.setGravity(Gravity.END);
-        row.addView(meta, UiKit.matchWrap());
+        LinearLayout metaRow = new LinearLayout(this);
+        metaRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView senderView = UiKit.text(this, sender, 11, R.color.text_secondary);
+        metaRow.addView(senderView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView timeView = UiKit.text(this, time, 11, R.color.text_secondary);
+        timeView.setGravity(Gravity.END);
+        metaRow.addView(timeView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(metaRow, UiKit.matchWrap());
         TextView message = UiKit.text(this, line.getMessage(), 15, messageColor);
         UiKit.margin(message, 0, 2, 0, 0);
         row.addView(message);
