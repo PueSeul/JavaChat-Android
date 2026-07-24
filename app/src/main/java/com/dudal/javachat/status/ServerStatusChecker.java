@@ -2,6 +2,8 @@ package com.dudal.javachat.status;
 
 import com.dudal.javachat.data.SavedServer;
 
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+
 import org.geysermc.mcprotocollib.network.BuiltinFlags;
 import org.geysermc.mcprotocollib.network.Session;
 import org.geysermc.mcprotocollib.network.event.session.DisconnectedEvent;
@@ -22,6 +24,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class ServerStatusChecker {
     private static final int CONNECT_TIMEOUT_SECONDS = 4;
     private static final int TOTAL_TIMEOUT_SECONDS = 6;
+    private static final LegacyComponentSerializer LEGACY_TEXT =
+            LegacyComponentSerializer.legacySection();
 
     private ServerStatusChecker() {}
 
@@ -69,7 +73,8 @@ public final class ServerStatusChecker {
                     measuredLatency,
                     version == null ? null : version.getVersionName(),
                     version == null ? -1 : version.getProtocolVersion(),
-                    info.getIconPng());
+                    info.getIconPng(),
+                    LEGACY_TEXT.serialize(info.getDescription()));
         } catch (Throwable ignored) {
             return ServerStatusResult.offline();
         } finally {

@@ -58,6 +58,10 @@ public final class ServerRepository {
         persist(servers);
     }
 
+    public synchronized void reorder(List<String> orderedIds) {
+        persist(ServerOrder.apply(getAll(), orderedIds));
+    }
+
     private void persist(List<SavedServer> servers) {
         preferences.edit().putString(KEY_SERVERS, gson.toJson(servers, LIST_TYPE)).apply();
     }

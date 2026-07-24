@@ -10,10 +10,11 @@ public final class ServerStatusResult {
     private final String versionName;
     private final int protocolVersion;
     private final byte[] iconPng;
+    private final String motd;
 
     private ServerStatusResult(boolean online, int onlinePlayers, int maxPlayers,
                                long latencyMs, String versionName, int protocolVersion,
-                               byte[] iconPng) {
+                               byte[] iconPng, String motd) {
         this.online = online;
         this.onlinePlayers = onlinePlayers;
         this.maxPlayers = maxPlayers;
@@ -21,6 +22,7 @@ public final class ServerStatusResult {
         this.versionName = versionName;
         this.protocolVersion = protocolVersion;
         this.iconPng = iconPng == null ? null : Arrays.copyOf(iconPng, iconPng.length);
+        this.motd = motd;
     }
 
     public static ServerStatusResult online(int onlinePlayers, int maxPlayers,
@@ -36,13 +38,21 @@ public final class ServerStatusResult {
     public static ServerStatusResult online(int onlinePlayers, int maxPlayers,
                                             long latencyMs, String versionName,
                                             int protocolVersion, byte[] iconPng) {
+        return online(onlinePlayers, maxPlayers, latencyMs, versionName,
+                protocolVersion, iconPng, null);
+    }
+
+    public static ServerStatusResult online(int onlinePlayers, int maxPlayers,
+                                            long latencyMs, String versionName,
+                                            int protocolVersion, byte[] iconPng,
+                                            String motd) {
         return new ServerStatusResult(
                 true, onlinePlayers, maxPlayers, latencyMs, versionName,
-                protocolVersion, iconPng);
+                protocolVersion, iconPng, motd);
     }
 
     public static ServerStatusResult offline() {
-        return new ServerStatusResult(false, 0, 0, -1, null, -1, null);
+        return new ServerStatusResult(false, 0, 0, -1, null, -1, null, null);
     }
 
     public boolean isOnline() { return online; }
@@ -54,4 +64,5 @@ public final class ServerStatusResult {
     public byte[] getIconPng() {
         return iconPng == null ? null : Arrays.copyOf(iconPng, iconPng.length);
     }
+    public String getMotd() { return motd; }
 }

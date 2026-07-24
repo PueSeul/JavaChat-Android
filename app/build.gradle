@@ -18,8 +18,8 @@ android {
         applicationId = "com.dudal.javachat"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
         testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
 
@@ -70,6 +70,7 @@ dependencies {
     implementation project(":mcprotocol")
     implementation "com.google.code.gson:gson:2.14.0"
     implementation "com.google.guava:guava:33.4.8-android"
+    implementation "net.kyori:adventure-text-serializer-legacy:4.25.0"
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
     implementation files("libs/viaversion-common-5.11.1-android.jar")
     implementation "org.yaml:snakeyaml:2.4"
