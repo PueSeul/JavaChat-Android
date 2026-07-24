@@ -1,8 +1,10 @@
 package com.dudal.javachat.status;
 
 import com.dudal.javachat.data.SavedServer;
+import com.dudal.javachat.protocol.LegacyText;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import org.geysermc.mcprotocollib.network.Server;
 import org.geysermc.mcprotocollib.network.server.NetworkServer;
@@ -34,7 +36,7 @@ public class ServerStatusCheckerTest {
         byte[] icon = {1, 2, 3, 4};
         testServer.setGlobalFlag(MinecraftConstants.SERVER_INFO_BUILDER_KEY,
                 session -> new ServerStatusInfo(
-                        Component.text("Minecraft Chat test"),
+                        Component.text("Minecraft Chat test", NamedTextColor.GREEN),
                         new PlayerInfo(20, 3, List.of()),
                         new VersionInfo("26.2", 776),
                         icon,
@@ -51,6 +53,8 @@ public class ServerStatusCheckerTest {
             assertEquals(20, result.getMaxPlayers());
             assertEquals("26.2", result.getVersionName());
             assertEquals(776, result.getProtocolVersion());
+            assertEquals("Minecraft Chat test", LegacyText.strip(result.getMotd()));
+            assertTrue(result.getMotd().contains("\u00A7a"));
             assertArrayEquals(icon, result.getIconPng());
         } finally {
             testServer.close(true);

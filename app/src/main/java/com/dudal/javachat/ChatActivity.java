@@ -38,17 +38,14 @@ import com.dudal.javachat.protocol.CommandSuggestions;
 import com.dudal.javachat.protocol.ConnectionState;
 import com.dudal.javachat.protocol.PlayerView;
 import com.dudal.javachat.service.MinecraftConnectionService;
+import com.dudal.javachat.ui.ChatLineText;
 import com.dudal.javachat.ui.MinecraftChatText;
 import com.dudal.javachat.ui.UiKit;
 import com.dudal.javachat.ui.SkinHeadLoader;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 public final class ChatActivity extends Activity implements MinecraftConnectionService.UiListener {
-    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.KOREA);
     private final Handler suggestionHandler = new Handler(Looper.getMainLooper());
     private SkinHeadLoader skinHeadLoader;
 
@@ -350,14 +347,17 @@ public final class ChatActivity extends Activity implements MinecraftConnectionS
     private void renderContent() {
         content.removeAllViews();
         if (showingPlayers) {
+            content.setGravity(Gravity.TOP);
             renderPlayers();
         } else if (chats.isEmpty()) {
+            content.setGravity(Gravity.CENTER_VERTICAL);
             TextView empty = UiKit.text(this,
                     "서버에 연결하면 이곳에 채팅이 표시됩니다.", 14, R.color.text_secondary);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(0, UiKit.dp(this, 32), 0, UiKit.dp(this, 32));
             content.addView(empty, UiKit.matchWrap());
         } else {
+            content.setGravity(Gravity.BOTTOM);
             for (ChatLine line : chats) {
                 addChatLine(line);
             }
@@ -366,34 +366,18 @@ public final class ChatActivity extends Activity implements MinecraftConnectionS
     }
 
     private void addChatLine(ChatLine line) {
-        LinearLayout row = UiKit.vertical(this);
-        String time = timeFormat.format(new Date(line.getTimestamp()));
         int messageColor = switch (line.getKind()) {
             case LOCAL_ERROR -> R.color.danger;
             case PRESENCE -> R.color.chat_presence;
             case SYSTEM -> R.color.chat_server;
             case PLAYER -> R.color.text_primary;
         };
-        LinearLayout metaRow = new LinearLayout(this);
-        metaRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView senderView = UiKit.text(this, "", 11, R.color.text_secondary);
-        senderView.setText(MinecraftChatText.format(
-                line.getFormattedSender(), getColor(R.color.text_secondary)));
-        metaRow.addView(senderView, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView timeView = UiKit.text(this, time, 11, R.color.text_secondary);
-        timeView.setGravity(Gravity.END);
-        metaRow.addView(timeView, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(metaRow, UiKit.matchWrap());
         TextView message = UiKit.text(this, "", 15, messageColor);
         message.setText(MinecraftChatText.format(
-                line.getFormattedMessage(), getColor(messageColor)));
-        UiKit.margin(message, 0, 2, 0, 0);
-        row.addView(message);
-        UiKit.margin(row, 0, 8, 0, 8);
-        content.addView(row);
-        content.addView(UiKit.divider(this));
+                ChatLineText.compose(line), getColor(messageColor)));
+        message.setIncludeFontPadding(false);
+        message.setLineSpacing(UiKit.dp(this, 1), 1.0f);
+        content.addView(message, UiKit.matchWrap());
     }
 
     private void renderPlayers() {

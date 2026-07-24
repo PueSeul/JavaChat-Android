@@ -19,6 +19,8 @@ import net.lenni0451.commons.httpclient.HttpClient;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 public final class MicrosoftAuthRepository {
@@ -32,7 +34,9 @@ public final class MicrosoftAuthRepository {
     private final Context appContext;
     private final SecureStore secureStore;
     private final SharedPreferences metadata;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final AtomicLong loginGeneration = new AtomicLong();
+    private volatile Future<?> loginTask;
 
     public MicrosoftAuthRepository(Context context) {
         appContext = context.getApplicationContext();
@@ -48,28 +52,53 @@ public final class MicrosoftAuthRepository {
         return metadata.getString(ACCOUNT_NAME, null);
     }
 
-    public void login(LoginCallback callback) {
-        executor.execute(() -> {
+    public synchronized void login(LoginCallback callback) {
+        cancelLogin();
+        long generation = loginGeneration.incrementAndGet();
+        loginTask = executor.submit(() -> {
             try {
-                callback.onStatus("네트워크 연결 확인 중…");
+                sendStatus(callback, generation, "네트워크 연결 확인 중…");
                 AuthNetworkWaiter.awaitValidated(appContext, NETWORK_READY_WAIT_MS);
-                callback.onStatus("Microsoft 인증 서버에 연결 중…");
-                Consumer<MsaDeviceCode> deviceCodeConsumer = callback::onDeviceCode;
+                sendStatus(callback, generation, "Microsoft 인증 서버에 연결 중…");
+                Consumer<MsaDeviceCode> deviceCodeConsumer = code -> {
+                    if (isCurrent(generation)) {
+                        callback.onDeviceCode(code);
+                    }
+                };
                 HttpClient authHttpClient = AuthHttpClientFactory.create(
-                        USER_AGENT, callback::onStatus);
+                        USER_AGENT, status -> sendStatus(callback, generation, status));
                 JavaAuthManager manager = JavaAuthManager
                         .create(authHttpClient)
                         .login(
                                 (httpClient, config, consumer) ->
                                         new DeviceCodeMsaAuthService(httpClient, config, consumer),
-                                deviceCodeConsumer);
+                                 deviceCodeConsumer);
+                if (!isCurrent(generation)) {
+                    return;
+                }
                 OnlineIdentity identity = resolveIdentity(manager);
+                if (!isCurrent(generation)) {
+                    return;
+                }
                 save(manager, identity.getProfileName());
-                callback.onSuccess(identity.getProfileName());
+                if (isCurrent(generation)) {
+                    callback.onSuccess(identity.getProfileName());
+                }
             } catch (Throwable error) {
-                callback.onError(error);
+                if (isCurrent(generation)) {
+                    callback.onError(error);
+                }
             }
         });
+    }
+
+    public synchronized void cancelLogin() {
+        loginGeneration.incrementAndGet();
+        Future<?> active = loginTask;
+        loginTask = null;
+        if (active != null) {
+            active.cancel(true);
+        }
     }
 
     public OnlineIdentity requireIdentity() throws Exception {
@@ -92,7 +121,19 @@ public final class MicrosoftAuthRepository {
     }
 
     public void close() {
+        cancelLogin();
         executor.shutdownNow();
+    }
+
+    private boolean isCurrent(long generation) {
+        return loginGeneration.get() == generation
+                && !Thread.currentThread().isInterrupted();
+    }
+
+    private void sendStatus(LoginCallback callback, long generation, String status) {
+        if (isCurrent(generation)) {
+            callback.onStatus(status);
+        }
     }
 
     private OnlineIdentity resolveIdentity(JavaAuthManager manager) throws Exception {

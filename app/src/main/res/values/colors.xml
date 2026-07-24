@@ -3,10 +3,13 @@
     <color name="background">#101512</color>
     <color name="surface">#18201B</color>
     <color name="surface_high">#223028</color>
+    <color name="divider">#3A4A40</color>
     <color name="primary">#72D572</color>
     <color name="text_primary">#F2F7F3</color>
     <color name="text_secondary">#AAB8AE</color>
     <color name="chat_presence">#D6C875</color>
     <color name="chat_server">#D7B6FF</color>
+    <color name="ping_moderate">#F2D45C</color>
+    <color name="ping_slow">#F2A65A</color>
     <color name="danger">#FF7878</color>
 </resources>

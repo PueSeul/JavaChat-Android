@@ -2,6 +2,7 @@ package com.dudal.javachat;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.animation.LayoutTransition;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -11,15 +12,19 @@ import android.content.pm.PackageManager;
 import android.content.pm.Signature;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Point;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.InputType;
+import android.view.DragEvent;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -41,10 +46,14 @@ import com.dudal.javachat.data.ConnectionSettingsRepository;
 import com.dudal.javachat.data.SavedServer;
 import com.dudal.javachat.data.ServerRepository;
 import com.dudal.javachat.service.MinecraftConnectionService;
+import com.dudal.javachat.protocol.LegacyText;
 import com.dudal.javachat.protocol.ProtocolRegistry;
 import com.dudal.javachat.protocol.ProtocolSpec;
 import com.dudal.javachat.status.ServerStatusChecker;
 import com.dudal.javachat.status.ServerStatusResult;
+import com.dudal.javachat.status.LatencyQuality;
+import com.dudal.javachat.ui.MinecraftChatText;
+import com.dudal.javachat.ui.ServerMotdText;
 import com.dudal.javachat.ui.UiKit;
 import com.dudal.javachat.ui.ServerEndpointText;
 import com.dudal.javachat.update.GitHubUpdateChecker;
@@ -57,6 +66,7 @@ import net.raphimc.minecraftauth.msa.model.MsaDeviceCode;
 import java.io.File;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -70,10 +80,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 @SuppressLint("SetTextI18n")
 public final class MainActivity extends Activity {
     private static final int REQUEST_INSTALL_PERMISSION = 201;
+    private static final int REQUEST_MICROSOFT_LOGIN = 202;
+    private static final long SERVER_REORDER_HOLD_MS = 1_000L;
     private ServerRepository servers;
     private ConnectionSettingsRepository connectionSettings;
     private MicrosoftAuthRepository auth;
+    private ScrollView mainScroll;
     private LinearLayout serverList;
+    private LayoutTransition serverReorderTransition;
     private LinearLayout microsoftFields;
     private LinearLayout offlineFields;
     private LinearLayout updateCard;
@@ -107,6 +121,8 @@ public final class MainActivity extends Activity {
     private final ExecutorService updateExecutor = Executors.newSingleThreadExecutor();
     private final AtomicInteger statusGeneration = new AtomicInteger();
     private final Map<String, String> detectedVersionHints = new ConcurrentHashMap<>();
+    private ServerDragState activeServerDrag;
+    private long suppressServerClickUntil;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -141,6 +157,16 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_MICROSOFT_LOGIN) {
+            if (resultCode == RESULT_CANCELED && loginInProgress) {
+                auth.cancelLogin();
+                loginInProgress = false;
+                refreshAccount();
+                Toast.makeText(this, "Microsoft 로그인을 취소했습니다.",
+                        Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
         if (requestCode != REQUEST_INSTALL_PERMISSION || pendingUpdate == null) {
             return;
         }
@@ -157,6 +183,7 @@ public final class MainActivity extends Activity {
 
     private View buildContent() {
         ScrollView scroll = new ScrollView(this);
+        mainScroll = scroll;
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(getColor(R.color.background));
 
@@ -193,7 +220,7 @@ public final class MainActivity extends Activity {
                 UiKit.dp(this, 48), UiKit.dp(this, 44)));
         root.addView(titleRow, UiKit.matchWrap());
         TextView subtitle = UiKit.text(this,
-                "Minecraft Java 1.8.9–26.2 · 채팅과 접속자 목록",
+                "Minecraft Java 1.8.9–26.2",
                 14, R.color.text_secondary);
         UiKit.margin(subtitle, 0, 3, 0, 12);
         root.addView(subtitle);
@@ -295,6 +322,11 @@ public final class MainActivity extends Activity {
         root.addView(serverHeader);
 
         serverList = UiKit.vertical(this);
+        serverReorderTransition = new LayoutTransition();
+        serverReorderTransition.enableTransitionType(LayoutTransition.CHANGING);
+        serverReorderTransition.setDuration(180);
+        serverReorderTransition.setAnimateParentHierarchy(false);
+        serverList.setOnDragListener(this::handleServerListDrag);
         root.addView(serverList, UiKit.matchWrap());
 
         TextView note = UiKit.text(this,
@@ -421,49 +453,26 @@ public final class MainActivity extends Activity {
         card.setPadding(UiKit.dp(this, 12), UiKit.dp(this, 14),
                 UiKit.dp(this, 10), UiKit.dp(this, 14));
         card.setBackground(UiKit.rounded(this, getColor(R.color.surface), 16));
+        card.setClipToOutline(true);
+        card.setClickable(true);
+        card.setFocusable(true);
+        card.setContentDescription(server.getName() + " 서버 접속");
+        card.setTag(server.getId());
+        card.setOnClickListener(view -> {
+            if (SystemClock.uptimeMillis() >= suppressServerClickUntil) {
+                openChat(server);
+            }
+        });
+        configureServerReorder(card, server);
+        android.util.TypedValue selectable = new android.util.TypedValue();
+        if (getTheme().resolveAttribute(
+                android.R.attr.selectableItemBackground, selectable, true)
+                && selectable.resourceId != 0) {
+            card.setForeground(getDrawable(selectable.resourceId));
+        }
 
-        LinearLayout infoRow = new LinearLayout(this);
-        infoRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        LinearLayout identity = UiKit.vertical(this);
-        TextView name = UiKit.text(this, server.getName(), 15, R.color.text_primary);
-        name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-        name.setSingleLine(true);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        identity.addView(name, UiKit.matchWrap());
-
-        TextView endpoint = UiKit.text(this,
-                ServerEndpointText.format(server.getHost(), server.getPort()),
-                14, R.color.text_secondary);
-        endpoint.setSingleLine(true);
-        endpoint.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        endpoint.setAutoSizeTextTypeUniformWithConfiguration(
-                12, 14, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
-        UiKit.margin(endpoint, 0, 3, 0, 0);
-        identity.addView(endpoint, UiKit.matchWrap());
-
-        TextView status = UiKit.text(this, getString(R.string.server_status_checking),
-                13, R.color.text_secondary);
-        status.setSingleLine(true);
-        status.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        status.setAutoSizeTextTypeUniformWithConfiguration(
-                11, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
-        UiKit.margin(status, 0, 5, 0, 0);
-        identity.addView(status, UiKit.matchWrap());
-
-        String authLabel = connectionSettings.getAuthMode() == AuthMode.MICROSOFT
-                ? "현재 온라인" : "현재 오프라인";
-        TextView details = UiKit.text(this,
-                ProtocolRegistry.selectionDisplayName(server.getVersionId())
-                        + " · " + authLabel, 13, R.color.primary);
-        details.setSingleLine(true);
-        details.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        details.setAutoSizeTextTypeUniformWithConfiguration(
-                11, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
-        UiKit.margin(details, 0, 3, 0, 0);
-        identity.addView(details, UiKit.matchWrap());
-        infoRow.addView(identity, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        LinearLayout cardBody = new LinearLayout(this);
+        cardBody.setGravity(Gravity.TOP);
 
         ImageView serverIcon = new ImageView(this);
         serverIcon.setContentDescription(server.getName() + " 서버 아이콘");
@@ -471,38 +480,137 @@ public final class MainActivity extends Activity {
         serverIcon.setClipToOutline(true);
         applyServerIcon(serverIcon, null);
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(
-                UiKit.dp(this, 64), UiKit.dp(this, 64));
-        iconParams.setMarginStart(UiKit.dp(this, 14));
-        infoRow.addView(serverIcon, iconParams);
-        card.addView(infoRow, UiKit.matchWrap());
+                UiKit.dp(this, 52), UiKit.dp(this, 52));
+        cardBody.addView(serverIcon, iconParams);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout rightColumn = UiKit.vertical(this);
+        LinearLayout topInfo = UiKit.vertical(this);
+        topInfo.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout infoRow = new LinearLayout(this);
+        infoRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        Button connect = UiKit.button(this, "접속", true);
-        connect.setTextSize(14);
-        connect.setPadding(0, 0, 0, 0);
-        connect.setOnClickListener(view -> openChat(server));
-        actions.addView(connect, new LinearLayout.LayoutParams(
-                0, UiKit.dp(this, 48), 1));
+        LinearLayout nameStatus = new LinearLayout(this);
+        nameStatus.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = UiKit.text(this, server.getName(), 15, R.color.text_primary);
+        name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setMaxWidth(UiKit.dp(this, 86));
+        name.setIncludeFontPadding(false);
+        nameStatus.addView(name, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        Button edit = UiKit.button(this, "편집", false);
-        edit.setTextSize(14);
-        edit.setPadding(0, 0, 0, 0);
-        edit.setOnClickListener(view -> {
-            Intent intent = new Intent(this, ServerEditorActivity.class);
-            intent.putExtra(ServerEditorActivity.EXTRA_SERVER_ID, server.getId());
-            startActivity(intent);
-        });
-        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(
-                0, UiKit.dp(this, 48), 1);
-        editParams.setMarginStart(UiKit.dp(this, 8));
-        actions.addView(edit, editParams);
-        LinearLayout.LayoutParams actionsParams = UiKit.matchWrap();
-        actionsParams.topMargin = UiKit.dp(this, 8);
-        card.addView(actions, actionsParams);
+        TextView status = UiKit.text(this, getString(R.string.server_status_card_checking),
+                11, R.color.text_secondary);
+        status.setGravity(Gravity.CENTER_VERTICAL);
+        status.setSingleLine(true);
+        status.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        status.setIncludeFontPadding(false);
+        status.setAutoSizeTextTypeUniformWithConfiguration(
+                9, 11, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        statusParams.setMarginStart(UiKit.dp(this, 4));
+        nameStatus.addView(status, statusParams);
+        infoRow.addView(nameStatus, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        infoRow.addView(new View(this), new LinearLayout.LayoutParams(
+                0, 1, 1));
 
-        checkServerStatus(server, status, details, serverIcon, generation);
+        TextView version = UiKit.text(this,
+                ProtocolRegistry.selectionDisplayName(server.getVersionId()),
+                12, R.color.primary);
+        version.setGravity(Gravity.END);
+        version.setSingleLine(true);
+        version.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        version.setIncludeFontPadding(false);
+        version.setAutoSizeTextTypeUniformWithConfiguration(
+                9, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        LinearLayout.LayoutParams versionParams = new LinearLayout.LayoutParams(
+                UiKit.dp(this, 108), ViewGroup.LayoutParams.WRAP_CONTENT);
+        versionParams.setMarginStart(UiKit.dp(this, 4));
+        infoRow.addView(version, versionParams);
+
+        TextView more = UiKit.text(this, "⋮", 20, R.color.text_secondary);
+        more.setGravity(Gravity.CENTER);
+        more.setIncludeFontPadding(false);
+        more.setContentDescription(server.getName() + " 서버 메뉴");
+        more.setClickable(true);
+        more.setFocusable(true);
+        more.setOnClickListener(view -> showServerActions(view, server));
+        infoRow.addView(more, new LinearLayout.LayoutParams(
+                UiKit.dp(this, 30), UiKit.dp(this, 18)));
+        topInfo.addView(infoRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        LinearLayout endpointRow = new LinearLayout(this);
+        endpointRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView endpoint = UiKit.text(this,
+                ServerEndpointText.format(server.getHost(), server.getPort()),
+                13, R.color.text_secondary);
+        endpoint.setGravity(Gravity.CENTER_VERTICAL);
+        endpoint.setSingleLine(true);
+        endpoint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        endpoint.setIncludeFontPadding(false);
+        endpoint.setAutoSizeTextTypeUniformWithConfiguration(
+                11, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        endpointRow.addView(endpoint, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+
+        TextView ping = UiKit.text(this, "…", 12, R.color.primary);
+        ping.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        ping.setSingleLine(true);
+        ping.setIncludeFontPadding(false);
+        ping.setAutoSizeTextTypeUniformWithConfiguration(
+                9, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        LinearLayout.LayoutParams pingParams = new LinearLayout.LayoutParams(
+                UiKit.dp(this, 108), ViewGroup.LayoutParams.MATCH_PARENT);
+        pingParams.setMarginStart(UiKit.dp(this, 4));
+        endpointRow.addView(ping, pingParams);
+        endpointRow.addView(new View(this), new LinearLayout.LayoutParams(
+                UiKit.dp(this, 30), ViewGroup.LayoutParams.MATCH_PARENT));
+        topInfo.addView(endpointRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        TextView playerCount = UiKit.text(this,
+                getString(R.string.server_player_count_checking),
+                12, R.color.text_secondary);
+        playerCount.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        playerCount.setSingleLine(true);
+        playerCount.setIncludeFontPadding(false);
+        playerCount.setAutoSizeTextTypeUniformWithConfiguration(
+                10, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        topInfo.addView(playerCount, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+        rightColumn.addView(topInfo, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this, 54)));
+
+        View motdDivider = new View(this);
+        motdDivider.setBackgroundColor(getColor(R.color.divider));
+        motdDivider.setVisibility(View.GONE);
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this, 1));
+        rightColumn.addView(motdDivider, dividerParams);
+
+        TextView motd = UiKit.text(this, "", 14, R.color.text_secondary);
+        motd.setMaxLines(2);
+        motd.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        motd.setGravity(Gravity.CENTER);
+        motd.setIncludeFontPadding(false);
+        motd.setLineSpacing(UiKit.dp(this, 1), 1.0f);
+        motd.setVisibility(View.GONE);
+        LinearLayout.LayoutParams motdParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this, 54));
+        rightColumn.addView(motd, motdParams);
+
+        LinearLayout.LayoutParams rightParams = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        rightParams.setMarginStart(UiKit.dp(this, 10));
+        cardBody.addView(rightColumn, rightParams);
+        card.addView(cardBody, UiKit.matchWrap());
+
+        checkServerStatus(server, status, playerCount, version, ping, serverIcon,
+                motdDivider, motd, generation);
 
         LinearLayout.LayoutParams cardParams = UiKit.matchWrap();
         cardParams.bottomMargin = UiKit.dp(this, 18);
@@ -510,8 +618,40 @@ public final class MainActivity extends Activity {
         return card;
     }
 
-    private void checkServerStatus(SavedServer server, TextView view, TextView details,
-                                   ImageView iconView, int generation) {
+    private void showServerActions(View anchor, SavedServer server) {
+        PopupMenu popup = new PopupMenu(this, anchor);
+        popup.getMenu().add("편집");
+        popup.getMenu().add("삭제");
+        popup.setOnMenuItemClickListener(item -> {
+            if ("편집".contentEquals(item.getTitle())) {
+                Intent intent = new Intent(this, ServerEditorActivity.class);
+                intent.putExtra(ServerEditorActivity.EXTRA_SERVER_ID, server.getId());
+                startActivity(intent);
+            } else if ("삭제".contentEquals(item.getTitle())) {
+                confirmDeleteServer(server);
+            }
+            return true;
+        });
+        popup.show();
+    }
+
+    private void confirmDeleteServer(SavedServer server) {
+        new AlertDialog.Builder(this)
+                .setTitle("서버 삭제")
+                .setMessage(server.getName() + " 서버 정보를 삭제할까요?")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("삭제", (dialog, which) -> {
+                    servers.delete(server.getId());
+                    refreshServers();
+                    Toast.makeText(this, "서버를 삭제했습니다.",
+                            Toast.LENGTH_SHORT).show();
+                })
+                .show();
+    }
+
+    private void checkServerStatus(SavedServer server, TextView view, TextView playerCount,
+                                   TextView version, TextView ping, ImageView iconView,
+                                   View motdDivider, TextView motd, int generation) {
         statusExecutor.execute(() -> {
             ServerStatusResult result = ServerStatusChecker.query(server);
             Bitmap icon = decodeServerIcon(result.getIconPng());
@@ -522,14 +662,35 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 if (result.isOnline()) {
-                    view.setText(getString(R.string.server_status_online,
-                            result.getOnlinePlayers(), result.getMaxPlayers(), result.getLatencyMs()));
+                    view.setText(R.string.server_status_card_online);
                     view.setTextColor(getColor(R.color.primary));
+                    playerCount.setText(getString(R.string.server_player_count_online,
+                            result.getOnlinePlayers(), result.getMaxPlayers()));
+                    playerCount.setTextColor(getColor(R.color.primary));
                     applyServerIcon(iconView, icon);
-                    applyDetectedVersion(server, result, details);
+                    applyStatusDetails(server, result, version, ping);
+                    String motdText = result.getMotd();
+                    if (motdText == null || LegacyText.strip(motdText).isBlank()) {
+                        hideServerMotd(motdDivider, motd);
+                    } else {
+                        motdText = ServerMotdText.normalize(motdText);
+                        motd.setTextColor(getColor(R.color.text_secondary));
+                        motd.setText(MinecraftChatText.format(
+                                motdText, getColor(R.color.text_secondary)));
+                        motdDivider.setVisibility(View.VISIBLE);
+                        motd.setVisibility(View.VISIBLE);
+                    }
                 } else {
-                    view.setText(R.string.server_status_offline);
+                    view.setText(R.string.server_status_card_offline);
                     view.setTextColor(getColor(R.color.danger));
+                    playerCount.setText(R.string.server_player_count_offline);
+                    playerCount.setTextColor(getColor(R.color.text_secondary));
+                    version.setText(ProtocolRegistry.selectionDisplayName(
+                            server.getVersionId()));
+                    version.setTextColor(getColor(R.color.text_secondary));
+                    ping.setText("—");
+                    ping.setTextColor(getColor(R.color.text_secondary));
+                    hideServerMotd(motdDivider, motd);
                     detectedVersionHints.remove(server.getId());
                 }
                 completePullRefreshCheck(generation);
@@ -537,25 +698,273 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void applyDetectedVersion(SavedServer server, ServerStatusResult result,
-                                      TextView details) {
-        if (!ProtocolRegistry.isAuto(server.getVersionId())) {
+    private static void hideServerMotd(View motdDivider, TextView motd) {
+        motdDivider.setVisibility(View.GONE);
+        motd.setText("");
+        motd.setVisibility(View.GONE);
+    }
+
+    private void configureServerReorder(View card, SavedServer server) {
+        card.setOnTouchListener(new ServerReorderTouchListener(card, server));
+    }
+
+    private void beginServerDrag(View card, SavedServer server, float touchX, float touchY) {
+        if (activeServerDrag != null || card.getParent() != serverList) {
             return;
         }
-        String authLabel = connectionSettings.getAuthMode() == AuthMode.MICROSOFT
-                ? "현재 온라인" : "현재 오프라인";
+
+        ServerDragState state = new ServerDragState(
+                card, server.getName(), serverList.indexOfChild(card));
+        activeServerDrag = state;
+        boolean started = card.startDragAndDrop(
+                ClipData.newPlainText("server-order", server.getId()),
+                new ServerCardDragShadowBuilder(card, touchX, touchY),
+                state,
+                0);
+        if (!started) {
+            activeServerDrag = null;
+            return;
+        }
+
+        suppressServerClickUntil = Long.MAX_VALUE;
+        serverList.setLayoutTransition(serverReorderTransition);
+        card.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        card.setTranslationZ(UiKit.dp(this, 12));
+        card.animate()
+                .alpha(0.32f)
+                .scaleX(1.025f)
+                .scaleY(1.025f)
+                .setDuration(160)
+                .start();
+        serverList.requestDisallowInterceptTouchEvent(true);
+        Toast.makeText(this, "위아래로 끌어서 서버 순서를 바꾸세요.",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private boolean handleServerListDrag(View ignored, DragEvent event) {
+        if (!(event.getLocalState() instanceof ServerDragState state)) {
+            return false;
+        }
+        return switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_STARTED -> activeServerDrag == state;
+            case DragEvent.ACTION_DRAG_LOCATION -> {
+                autoScrollServerList(event.getY());
+                moveDraggedServerCard(state.card, event.getY());
+                yield true;
+            }
+            case DragEvent.ACTION_DROP -> {
+                moveDraggedServerCard(state.card, event.getY());
+                yield true;
+            }
+            case DragEvent.ACTION_DRAG_ENDED -> {
+                finishServerDrag(state);
+                yield true;
+            }
+            default -> true;
+        };
+    }
+
+    private void moveDraggedServerCard(View draggedCard, float dragY) {
+        int currentIndex = serverList.indexOfChild(draggedCard);
+        if (currentIndex < 0) {
+            return;
+        }
+
+        int insertionIndex = 0;
+        for (int index = 0; index < serverList.getChildCount(); index++) {
+            View child = serverList.getChildAt(index);
+            if (child == draggedCard) {
+                continue;
+            }
+            if (dragY < child.getY() + child.getHeight() / 2f) {
+                break;
+            }
+            insertionIndex++;
+        }
+        if (insertionIndex == currentIndex) {
+            return;
+        }
+
+        ViewGroup.LayoutParams layoutParams = draggedCard.getLayoutParams();
+        serverList.removeView(draggedCard);
+        serverList.addView(draggedCard, insertionIndex, layoutParams);
+    }
+
+    private void autoScrollServerList(float listY) {
+        if (mainScroll == null) {
+            return;
+        }
+        int[] listLocation = new int[2];
+        int[] scrollLocation = new int[2];
+        serverList.getLocationOnScreen(listLocation);
+        mainScroll.getLocationOnScreen(scrollLocation);
+        float screenY = listLocation[1] + listY;
+        int edge = UiKit.dp(this, 64);
+        int step = UiKit.dp(this, 14);
+        int viewportTop = scrollLocation[1];
+        int viewportBottom = viewportTop + mainScroll.getHeight();
+        if (screenY < viewportTop + edge) {
+            mainScroll.scrollBy(0, -step);
+        } else if (screenY > viewportBottom - edge) {
+            mainScroll.scrollBy(0, step);
+        }
+    }
+
+    private void finishServerDrag(ServerDragState state) {
+        boolean orderChanged = serverList.indexOfChild(state.card) != state.originalIndex;
+        if (orderChanged) {
+            List<String> orderedIds = new ArrayList<>(serverList.getChildCount());
+            for (int index = 0; index < serverList.getChildCount(); index++) {
+                Object tag = serverList.getChildAt(index).getTag();
+                if (tag instanceof String id) {
+                    orderedIds.add(id);
+                }
+            }
+            servers.reorder(orderedIds);
+        }
+
+        state.card.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(160)
+                .withEndAction(() -> state.card.setTranslationZ(0))
+                .start();
+        serverList.requestDisallowInterceptTouchEvent(false);
+        activeServerDrag = null;
+        suppressServerClickUntil = SystemClock.uptimeMillis() + 500;
+        mainHandler.postDelayed(() -> {
+            if (activeServerDrag == null) {
+                serverList.setLayoutTransition(null);
+            }
+        }, 220);
+        if (orderChanged) {
+            Toast.makeText(this, state.serverName + " 서버 순서를 저장했습니다.",
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private final class ServerReorderTouchListener implements View.OnTouchListener {
+        private final View card;
+        private final SavedServer server;
+        private final Runnable beginDrag;
+        private boolean tracking;
+        private float currentX;
+        private float currentY;
+
+        private ServerReorderTouchListener(View card, SavedServer server) {
+            this.card = card;
+            this.server = server;
+            beginDrag = () -> {
+                if (tracking && activeServerDrag == null && card.isAttachedToWindow()) {
+                    beginServerDrag(card, server, currentX, currentY);
+                }
+            };
+        }
+
+        @Override
+        public boolean onTouch(View view, MotionEvent event) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN -> {
+                    tracking = true;
+                    currentX = event.getX();
+                    currentY = event.getY();
+                    card.getParent().requestDisallowInterceptTouchEvent(true);
+                    mainHandler.postDelayed(beginDrag, SERVER_REORDER_HOLD_MS);
+                }
+                case MotionEvent.ACTION_MOVE -> {
+                    currentX = event.getX();
+                    currentY = event.getY();
+                    if (tracking && (currentX < 0 || currentX > card.getWidth()
+                            || currentY < 0 || currentY > card.getHeight())) {
+                        cancel();
+                    }
+                }
+                case MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> cancel();
+                default -> { }
+            }
+            return false;
+        }
+
+        private void cancel() {
+            tracking = false;
+            mainHandler.removeCallbacks(beginDrag);
+            if (activeServerDrag == null && card.getParent() != null) {
+                card.getParent().requestDisallowInterceptTouchEvent(false);
+            }
+        }
+    }
+
+    private static final class ServerDragState {
+        private final View card;
+        private final String serverName;
+        private final int originalIndex;
+
+        private ServerDragState(View card, String serverName, int originalIndex) {
+            this.card = card;
+            this.serverName = serverName;
+            this.originalIndex = originalIndex;
+        }
+    }
+
+    private static final class ServerCardDragShadowBuilder extends View.DragShadowBuilder {
+        private final int touchX;
+        private final int touchY;
+
+        private ServerCardDragShadowBuilder(View view, float touchX, float touchY) {
+            super(view);
+            this.touchX = Math.round(touchX);
+            this.touchY = Math.round(touchY);
+        }
+
+        @Override
+        public void onProvideShadowMetrics(Point shadowSize, Point shadowTouchPoint) {
+            View view = getView();
+            if (view == null) {
+                shadowSize.set(1, 1);
+                shadowTouchPoint.set(0, 0);
+                return;
+            }
+            shadowSize.set(view.getWidth(), view.getHeight());
+            shadowTouchPoint.set(
+                    Math.max(0, Math.min(touchX, view.getWidth())),
+                    Math.max(0, Math.min(touchY, view.getHeight())));
+        }
+    }
+
+    private void applyStatusDetails(SavedServer server, ServerStatusResult result,
+                                    TextView version, TextView ping) {
+        if (!ProtocolRegistry.isAuto(server.getVersionId())) {
+            setVersionAndPing(version, ping,
+                    ProtocolRegistry.selectionDisplayName(server.getVersionId()),
+                    result.getLatencyMs(), R.color.primary);
+            return;
+        }
         Optional<ProtocolSpec> detected =
                 ProtocolRegistry.detect(result.getProtocolVersion(), result.getVersionName());
         if (detected.isPresent()) {
             detectedVersionHints.put(server.getId(), detected.get().getId());
-            details.setText("Auto → " + detected.get().getDisplayName()
-                    + " · " + authLabel);
-            details.setTextColor(getColor(R.color.primary));
+            setVersionAndPing(version, ping, detected.get().getDisplayName(),
+                    result.getLatencyMs(), R.color.primary);
         } else {
             detectedVersionHints.remove(server.getId());
-            details.setText("Auto → 미지원 버전 · " + authLabel);
-            details.setTextColor(getColor(R.color.danger));
+            setVersionAndPing(version, ping, "감지 실패",
+                    result.getLatencyMs(), R.color.danger);
         }
+    }
+
+    private void setVersionAndPing(TextView versionView, TextView pingView, String version,
+                                   long latencyMs, int versionColor) {
+        versionView.setText(version);
+        versionView.setTextColor(getColor(versionColor));
+        pingView.setText(latencyMs + "ms");
+        pingView.setTextColor(getColor(switch (
+                LatencyQuality.from(latencyMs)) {
+            case FAST -> R.color.primary;
+            case MODERATE -> R.color.ping_moderate;
+            case SLOW -> R.color.ping_slow;
+            case POOR -> R.color.danger;
+        }));
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -735,12 +1144,13 @@ public final class MainActivity extends Activity {
             public void onDeviceCode(MsaDeviceCode code) {
                 runOnUiThread(() -> {
                     refreshAccount();
-                    showDeviceCode(code);
+                    openMicrosoftLogin(code);
                 });
             }
 
             @Override
             public void onSuccess(String profileName) {
+                MicrosoftLoginActivity.finishLogin(MainActivity.this, true);
                 runOnUiThread(() -> {
                     loginInProgress = false;
                     Toast.makeText(MainActivity.this,
@@ -751,6 +1161,7 @@ public final class MainActivity extends Activity {
 
             @Override
             public void onError(Throwable error) {
+                MicrosoftLoginActivity.finishLogin(MainActivity.this, false);
                 runOnUiThread(() -> {
                     loginInProgress = false;
                     refreshAccount();
@@ -758,6 +1169,15 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void openMicrosoftLogin(MsaDeviceCode code) {
+        try {
+            startActivityForResult(MicrosoftLoginActivity.createIntent(
+                    this, code.getDirectVerificationUri()), REQUEST_MICROSOFT_LOGIN);
+        } catch (RuntimeException error) {
+            showDeviceCode(code);
+        }
     }
 
     private void showDeviceCode(MsaDeviceCode code) {
